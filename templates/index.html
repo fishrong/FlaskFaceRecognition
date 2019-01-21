@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- 上述3个meta标签*必须*放在最前面，任何其他内容都*必须*跟随其后！ -->
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@3.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>在线人脸识别系统</title>
+    <style>
+
+
+        #icon {
+
+        }
+    </style>
+</head>
+<body id="dragZone">
+<div class="container">
+    <div class="panel panel-default">
+        <div class="panel-heading" style="position: relative">
+            <h1 class="panel-title" style="font-size: 25px;color: #909090;display: inline-block">在线人脸识别系统</h1>
+            <span id="icon_moblie" style="position: absolute;right: 10px;">
+            <img onclick="chooseFile(this)" width="25" height="25" style="vertical-align: center;margin-right: 20px"
+                 src="{{ url_for('static',filename='icon_fold.png') }}">
+                <input id="input_file" type="file" style="display: none">
+            <img id="icon_rec" width="25" height="25" style="vertical-align: center"
+                 src="{{ url_for('static',filename='icon_recognize.png') }}">
+            </span>
+        </div><!--顶部按钮-->
+        <div class="panel-body">
+            <!-- 摄像头模块 -->
+            <div id="video_contanier" style="display: none">
+                <canvas id="canvas" width="600" height="400" style="position: absolute;">
+                </canvas><!--用于画-->
+                <canvas id="canvas2" width="600" height="400"
+                        style="position: absolute;display: none">
+                </canvas>
+                <video id="video"
+                       style="border: 3px solid rebeccapurple;border-radius: 3px;background-color: rebeccapurple"
+                       controls>
+                </video>
+            </div><!-- 摄像头模块 -->
+            <span id="testvideo"></span>
+            <div class="row">
+                <div id="tips_pc" class="col-sm-6 col-md-3">
+                    <div class="thumbnail">
+
+                        <img src="{{ url_for('static',filename='icon_add.png') }}" alt="...">
+                        <div class="caption">
+
+                            <p>拖拽图片到窗口开始识别</p>
+
+                        </div>
+                    </div>
+                </div>
+                <div id="img_contanier">
+
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- jQuery (Bootstrap 的所有 JavaScript 插件都依赖 jQuery，所以必须放在前边) -->
+<script src="https://cdn.jsdelivr.net/npm/jquery@1.12.4/dist/jquery.min.js"></script>
+<!-- 加载 Bootstrap 的所有 JavaScript 插件。你也可以根据需要只加载单个插件。 -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@3.3.7/dist/js/bootstrap.min.js"></script>
+
+<script type="text/javascript">
+    var video = document.getElementById("video");
+
+    var myStream;
+    var isVideoPlay = false;
+    {#var tips = document.getElementById("tips");#}
+    var tips_pc = document.getElementById("tips_pc");
+    var video_contanier = document.getElementById("video_contanier");
+    var video_width = 640;
+    var video_height = 480;
+    var client;
+    var canvas2 = document.getElementById('canvas2');
+    var context2 = canvas2.getContext('2d');
+
+    var canvas = document.getElementById('canvas');
+    var context = canvas.getContext('2d');
+
+
+    if (/Android|webOS|iPhone|iPod|BlackBerry/i.test(navigator.userAgent)) {//判断客户端
+        // 移动端操作
+
+        client = "moblie";
+
+
+        console.log("mobile")
+    } else {
+        client = "pc";
+        {#tips.style.display = "none";#}
+        console.log("pc")
+        // PC端操作
+    }
+
+
+    var dragZone = document.getElementById("dragZone");
+    var icon_rec = document.getElementById("icon_rec");
+    icon_rec.style.filter = "grayscale(100%)";
+    icon_rec.onclick = function () {
+        changeVideoState()
+    };
+
+
+    //调用摄像头时改变状态,人头按钮
+    function changeVideoState() {
+        console.log("click>>>");
+        // stop
+        if (isVideoPlay) {
+            video_contanier.style.display = "none";
+            tips_pc.style.display = "inline-block";
+
+            isVideoPlay = false;
+            myStream.getTracks()[0].stop();
+            icon_rec.style.filter = "grayscale(100%)";
+            stop_recognization();
+        } else {// start
+            tips_pc.style.display = "none";
+
+            video_contanier.style.display = "inline-block";
+            if (client === "pc") {
+
+            } else {
+                video_contanier.style.width = "100%";
+                video_width = video_contanier.getBoundingClientRect().width;
+                video_height = 336;
+
+            }
+
+
+            video.width = video_width;
+            video.height = video_height;
+            console.log("vw:", video.videoWidth, "vh:", video.videoHeight)
+
+
+            canvas.width = video_width;
+            canvas.height = video_height;
+            canvas2.width = video_width;
+            canvas2.height = video_height;
+
+            console.log("cw:", video_contanier.style.width, "ch:", video_contanier.style.width);
+
+            console.log("start");
+            isVideoPlay = true;
+            playvideo();
+            icon_rec.style.filter = "grayscale(0%)";
+            start_recognization();
+
+        }
+
+    }
+
+    function log(c) {
+        var testvideo = document.getElementById("testvideo");
+        testvideo.innerHTML = "vh:" + video.videoHeight + ",vw:" + video.videoWidth + "ch:" + video.height + ",cw:" + video.width;
+    }
+
+    function testsize() {
+        console.log("vh:", video.videoHeight);
+    }
+
+
+    var img_contanier = document.getElementById("img_contanier");
+    var select_file;
+    //以下定义拖拽的监听事件
+    dragZone.addEventListener("dragenter", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "copy";
+
+    }, false);
+    dragZone.addEventListener("dragover", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "copy";
+
+    }, false);
+    dragZone.addEventListener("dragenleave", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+    }, false);
+    //放入
+    dragZone.addEventListener("drop", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var fileList = e.dataTransfer.files; //获取文件对象
+        {#console.log(fileList);#}
+        select_file = fileList[0];
+        showpic();
+        send(fileList[0], "{{ url_for('pichandler') }}");
+
+
+    }, false);
+
+    //显示上传图片
+    function showpic() {
+        tips_pc.style.display = "none";
+        img_contanier.innerHTML = "<div class=\"col-sm-6 col-md-3\">\n" +
+            "                        <div class=\"thumbnail\">\n" +
+            "                            <img class=\"icon\" src=\"{{ url_for('static',filename='icon_add.png') }}\">\n" +
+            "                            <div class=\"img_names\">" +
+            "                            </div>" +
+            "                        </div>\n" +
+            "                    </div>" + img_contanier.innerHTML;
+        var fr = new FileReader();
+        var icon = document.getElementsByClassName("icon")[0];
+        //console.log(icon.getBoundingClientRect());
+        //转化为dataurl对象
+        fr.onload = function () {
+            icon.src = fr.result;
+        };
+        // 注意要先设置回调再读取文件
+        fr.readAsDataURL(select_file);
+    }
+
+    function toDataURL() {
+
+    }
+
+    /*
+        window.onresize = function () {
+            var icon = document.getElementsByClassName("icon")[0];
+            var marginLeft = getStyle(icon, 'marginLeft');
+            var marginTop = getStyle(icon, 'marginTop');
+            console.log("Left",marginLeft);
+        console.log("Top",parseFloat(marginLeft)+100);
+    };*/
+
+    function getStyle(obj, attr) {
+        if (obj.currentStyle) {
+            return obj.currentStyle[attr];
+        } else {
+            return document.defaultView.getComputedStyle(obj, null)[attr];
+        }
+    }
+
+    //发送到服务器
+    function send(fileList, url) {
+        var img = new Image();
+        var fr = new FileReader();
+        fr.onload = function () {
+            img.src = fr.result;
+            var canvas3 = document.createElement('canvas');
+            var ctx = canvas3.getContext('2d');
+            // 创建属性节点
+            var anw = document.createAttribute("width");
+            anw.nodeValue = img.width;
+            var anh = document.createAttribute("height");
+            anh.nodeValue = img.height;
+            canvas3.setAttributeNode(anw);
+            canvas3.setAttributeNode(anh);
+
+            ctx.drawImage(img, 0, 0, img.width, img.height);
+            // 图像质量
+
+            // quality值越小，所绘制出的图像越模糊
+            var base64 = canvas3.toDataURL('image/jpeg', 0.1);
+            //console.log(base64)
+            //压缩图片
+
+
+            var fd = new FormData();
+            fd.append("picdata", base64);
+            //console.log(fileList);
+            var xhr = new XMLHttpRequest();
+            xhr.open("post", url, true);
+            //服务器响应
+
+            xhr.onreadystatechange = function () {
+                if (xhr.status === 200 && xhr.readyState === 4) {
+                    console.log("success");
+
+                    var div_names = document.getElementsByClassName("img_names")[0];
+                    var info = document.getElementsByClassName("img_info")[0];
+                    {#name.innerText = "识别结果";#}
+                    var responses = xhr.responseText.split("-");//'-'分开名字和位置
+                    var response_names = responses[0].split(",");//名字数组
+                    //console.log("res_names:", response_names);
+
+
+                    var response_loctions = responses[1].split(";");//位置数组
+                    div_names.innerHTML = "";//与服务器传回顺序颠倒
+                    for (var i = 0; i < response_names.length; i++) {
+                        div_names.innerHTML = "<div  class=\"img_container\" style=\"position: absolute\">\n" +
+                            "                        <p class=\"img_name\" data-toggle=\"tooltip\" data-placement=\"left\" title=\"Tooltip on left\"></p>\n" +
+                            "\n" +
+                            "                    </div>" + div_names.innerHTML;
+
+                        var icon = document.getElementsByClassName("icon")[0];
+                        var img_name = document.getElementsByClassName("img_name")[0];
+                        img_name.setAttribute("title", response_names[i]);
+
+                        //设置名字位置
+                        var res_loction = response_loctions[i].replace("(", "").replace(")", "").split(",");
+                        //console.log("res_locations:", res_loction);
+                        var rate = icon.height / icon.naturalHeight;
+                        var top = (parseFloat(res_loction[0]) * rate) + parseFloat(getStyle(icon, 'marginTop'));
+                        var left = ((parseFloat(res_loction[3]) + 40) * rate) + parseFloat(getStyle(icon, 'marginLeft'));
+
+
+                        var img_container = document.getElementsByClassName("img_container")[0];
+                        img_container.style.top = top + "px";
+                        img_container.style.left = left + "px";
+
+                        $('[data-toggle="tooltip"]:first').tooltip('toggle');
+                        document.getElementsByClassName("tooltip-inner")[0].setAttribute("onclick", "edit(this)");
+                        {#info.innerHTML = "<span class=\"label label-info\">" + "&nbsp;" +#}
+                        {#    "<span>" + name_label[i]#}
+                        {#    + "</span>&nbsp;</span>" + "&nbsp;&nbsp;" + info.innerHTML;#}
+                    }
+
+
+                }
+            };
+            xhr.send(fd);
+
+        };
+        // 注意要先设置回调再读取文件
+        fr.readAsDataURL(fileList);
+
+
+    }
+
+    function test(c) {
+        var input_group = c.parentElement.parentElement.parentElement.nextElementSibling.firstElementChild;
+        input_group.style.visibility = "visible";
+    }
+
+    //手动选择上传文件
+    function chooseFile(currentNode) {
+        var input_file = document.getElementById("input_file");
+        var nextNode = currentNode.nextElementSibling;
+        input_file.click();
+        input_file.onchange = function (ev) {
+
+            file_temp = input_file.files[0];
+
+            if (file_temp !== undefined) {
+                select_file = file_temp;
+                var img_info = document.getElementById("img_info");
+                if (input_file.files[0] === undefined) {
+                    img_info.innerText = "Oooops,give me a file...";
+                } else {
+                    try {
+                        showpic();
+                        send(input_file.files[0], "{{ url_for('pichandler') }}");
+                    } catch (e) {
+
+                        img_info.innerText = "Oooops,try again...";
+                    }
+                }
+                //nextNode.removeAttribute("disabled");
+                //nextNode.setAttribute("onclick", "upload(this)");//上传
+
+
+                //tips.innerText = "已选择：" + select_file['name'];//手机端显示
+
+            } else {
+                img_info.innerText = "未选择文件...";
+            }
+
+        };
+
+
+    }
+
+    //变更前的label，用于区别哪个被编辑了
+    var info_str_before = [];
+
+    //开启编辑
+    function edit(currentImag) {
+        info_str_before = [];
+
+
+        var img_info = currentImag.parentElement.parentElement.parentElement;//父节点的前一个节点
+        console.log("imginfo:", img_info);
+
+
+        for (var i = 0; i < img_info.children.length; i++) {//用于判断是否更改内容
+            var temp = img_info.children[i].children[1].children[1];
+
+            info_str_before.push(temp.innerHTML);
+
+        }
+        currentImag.setAttribute("contenteditable", "true");//名字可编辑
+        //console.log("info_before:",info_str_before)
+        info_str_after = [];
+        info_list = [];
+        isChange = false;
+        currentImag.onblur = function () {
+            for (var i = 0; i < img_info.children.length; i++) {//用于判断是否更改内容
+                var temp = img_info.children[i].children[1].children[1];
+                if (info_str_before[i] !== temp.innerHTML && info_str_before[i] === "somebody") {//只有人名为未识别且更改会提交到服务器
+                    info_list.push(temp.innerHTML);
+                    isChange = true;
+                } else info_list.push("*");//没有变更则为*
+
+
+            }
+            info_list.reverse();
+            console.log(info_list);
+
+            if (isChange) {
+                var fd = new FormData();
+                var img = img_info.previousElementSibling;
+                fd.append("picdata", img.src);
+                fd.append("picinfo", info_list);
+                var xhr = new XMLHttpRequest();
+                xhr.open("post", "{{ url_for('update') }}", true);
+                //服务器响应
+                xhr.onreadystatechange = function () {
+                    if (xhr.status === 200 && xhr.readyState === 4) {
+                        console.log("change success");
+                    }
+
+
+                }
+            }
+            xhr.send(fd);
+        }
+
+
+    }
+
+
+    //上传图片，浏览方式选择图片上传
+    function upload(currentNode) {
+        currentNode.setAttribute("onclick", "");
+        currentNode.setAttribute("disabled", "disabled");
+        var input_file = document.getElementById("input_file");
+        var img_info = document.getElementById("img_info");
+        if (input_file.files[0] === undefined) {
+            img_info.innerText = "Oooops,give me a file...";
+        } else {
+            try {
+                showpic();
+                send(input_file.files[0], "{{ url_for('pichandler') }}");
+            } catch (e) {
+
+                img_info.innerText = "Oooops,try again...";
+            }
+        }
+
+
+    }
+
+
+</script>
+<script>
+    {% include "video.js" %}
+</script>
+</body>
+</html>
